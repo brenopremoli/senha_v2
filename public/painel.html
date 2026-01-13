@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Painel de Atendimento</title>
+    <style>
+        :root { 
+            --bg-geral: #f5f5f7;       /* Fundo claro original */
+            --bg-video-moldura: #000;  /* Fundo atrás do vídeo */
+            --accent: #0071e3;         /* Azul original */
+            --text-main: #1d1d1f;      /* Texto principal escuro */
+            --text-muted: #86868b;     /* Texto secundário */
+        }
+
+        body { 
+            background-color: var(--bg-geral); 
+            margin: 0; 
+            height: 100vh; 
+            display: grid;
+            grid-template-columns: 1fr 550px; /* Área da senha ampliada */
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+        }
+
+        /* ÁREA DO VÍDEO COM MOLDURA E CANTOS ARREDONDADOS */
+        .video-wrapper { 
+            background: var(--bg-geral); 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 30px; /* Moldura interna para o vídeo não escapar */
+            box-sizing: border-box;
+            border-color:#86868b ;
+        }
+
+        .video-container {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            border-radius: 40px; /* Cantos arredondados */
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            background: #000;
+            -webkit-mask-image: -webkit-radial-gradient(white, black);
+        }
+
+        #video-player { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: fill; /* Preenchimento total conforme solicitado */
+            border-radius: 40px;
+        }
+
+        /* BARRA LATERAL (BRANCO E AZUL) */
+        .sidebar-senhas { 
+            background: var(--bg-geral); 
+            display: flex; 
+            flex-direction: column; 
+            padding: 30px;
+            height: 100vh;
+            box-sizing: border-box;
+            border-left: 2px solid #ddd;
+        }
+
+        /* ÁREA DA SENHA ATUAL - REMOVIDO FUNDO PRETO */
+        .display-senha { 
+            background: white; 
+            color: var(--text-main); 
+            text-align: center; 
+            padding: 50px 10px; 
+            border-radius: 30px; 
+            margin-bottom: 30px;
+            border: 4px solid var(--accent); /* Borda azul para destaque */
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        }
+        
+        #senha-atual { 
+            font-size: 14rem; 
+            font-weight: 900; 
+            display: block; 
+            line-height: 0.9; 
+            color: var(--text-main); /* Número da senha em azul */
+        }
+
+        #mesa-chamada { 
+            font-size: 3.5rem; 
+            color: var(--accent); 
+            font-weight: bold; 
+            display: block; 
+            margin-top: 15px; 
+        }
+        
+        .historico-title { 
+            text-align: center; 
+            color: var(--text-muted); 
+            text-transform: uppercase; 
+            font-size: 1.4rem; 
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+        }
+        
+        .item-hist { 
+            display: flex; 
+            justify-content: space-between; 
+            padding: 20px; 
+            border-bottom: 1px solid #eee; 
+            font-size: 2.2rem; 
+            font-weight: bold; 
+            color: var(--accent); /* Histórico em azul */
+        }
+
+        .relogio-footer { margin-top: auto; text-align: center; padding: 10px; }
+        #hora { font-size: 4rem; font-weight: 700; color: var(--text-main); }
+        #data { font-size: 1.5rem; color: var(--text-muted); text-transform: capitalize; }
+
+        /* BOTÃO INICIAL */
+        #setup-som { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; z-index: 10000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .btn-ativar { background: var(--accent); color: white; border: none; padding: 30px 60px; font-size: 2rem; font-weight: bold; border-radius: 20px; cursor: pointer; }
+
+        .flash-active { animation: alertFlash 1s ease-in-out; }
+        @keyframes alertFlash { 0% { background: white; } 50% { background: #e0f0ff; } 100% { background: white; } }
+    </style>
+</head>
+<body>
+    <div id="setup-som">
+        <button class="btn-ativar" onclick="iniciarPainel()">ATIVAR PAINEL E SOM 🔊</button>
+    </div>
+
+    <section class="video-wrapper">
+        <div class="video-container">
+            <video id="video-player" muted loop>
+                <source src="video.mp4" type="video/mp4">
+            </video>
+        </div>
+    </section>
+
+    <aside class="sidebar-senhas">
+        <div class="display-senha" id="alerta-senha">
+            <span style="letter-spacing: 5px; font-size: 1.8rem; color: var(--text-muted);">SENHA ATUAL</span>
+            <span id="senha-atual">00</span>
+            <span id="mesa-chamada">AGUARDANDO</span>
+        </div>
+
+        <div class="historico-title">Anteriores</div>
+        <div id="historico"></div>
+
+        <div class="relogio-footer">
+            <div id="hora">00:00:00</div>
+            <div id="data">---</div>
+        </div>
+    </aside>
+
+    <audio id="som-campainha" src="som.mp3" preload="auto"></audio>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const som = document.getElementById('som-campainha');
+        const video = document.getElementById('video-player');
+
+        function iniciarPainel() {
+            som.play().then(() => { 
+                som.pause(); 
+                som.currentTime = 0; 
+                document.getElementById('setup-som').style.display = 'none'; 
+                video.play();
+            });
+        }
+
+        function atualizarTempo() {
+            const agora = new Date();
+            document.getElementById('hora').innerText = agora.toLocaleTimeString('pt-BR');
+            document.getElementById('data').innerText = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+        }
+        setInterval(atualizarTempo, 1000);
+        atualizarTempo();
+
+        socket.on('nova-senha-painel', (dados) => {
+            document.getElementById('senha-atual').innerText = dados.senha;
+            document.getElementById('mesa-chamada').innerText = `MESA ${dados.guiche}`;
+            const areaAlerta = document.getElementById('alerta-senha');
+            areaAlerta.classList.add('flash-active');
+            som.currentTime = 0;
+            som.play();
+            setTimeout(() => areaAlerta.classList.remove('flash-active'), 2000);
+
+            if (dados.tipo === 'chamada') {
+                const div = document.createElement('div');
+                div.className = 'item-hist';
+                div.innerHTML = `<span>SENHA ${dados.senha}</span><span style="font-size:2rem; color:var(--text-muted);">Mesa ${dados.guiche}</span>`;
+                const hist = document.getElementById('historico');
+                hist.prepend(div);
+                if (hist.children.length > 5) hist.removeChild(hist.lastChild);
+            }
+        });
+        socket.on('resetar-sistema-completo', () => location.reload());
+    </script>
+</body>
+</html>
